@@ -63,28 +63,3 @@ for cruise in df.Cruise.unique():
 			frames.append(df_output[['Date','Cruise','Lat','Lon','Date Compare','Cruise Compare','Lat Compare','Lon Compare','distance']])
 df_save = pd.concat(frames)
 df_save.to_pickle('./intercompare_floats.pickle')
-
-df_save['distance'].hist(bins=20) 
-plt.xlabel('Distance (km)')
-plt.xlim([0,600])
-plt.title('Number of occurrances of float intersection by distance')
-plt.show()
-plt.figure()
-df_plot = df_save[df_save.distance<50]
-(df_plot['Date']-df_plot['Date Compare']).dt.days.abs().hist(bins=20)
-plt.xlabel('Days')
-plt.title('Difference in days for all floats less than 50km')
-plt.show()
-
-
- for row in df_plot.iterrows():
-     date1 = row[1]['Date']
-     date2 = row[1]['Date Compare']
-     cruise1 = row[1]['Cruise']
-     cruise2 = row[1]['Cruise Compare']
-     plt.figure()
-     df_holder = df[(df.Date==date1)&(df.Cruise==cruise1)]
-     plt.plot(df_holder.Oxygen.values,df_holder.Pressure.values)
-     df_holder = df[(df.Date==date2)&(df.Cruise==cruise2)]
-     plt.plot(df_holder.Oxygen.values,df_holder.Pressure.values)
-     plt.show()
