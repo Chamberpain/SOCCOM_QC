@@ -5,7 +5,7 @@ sys.path.append(os.path.abspath("../"))
 import soccom_proj_settings
 import numpy as np 
 from scipy import interpolate
-
+from mpl_toolkits.basemap import Basemap
 #Need to program a more reasonable number of pressure values to interpolate
 
 plot_float_stats = True
@@ -63,6 +63,14 @@ for cruise in df.Cruise.unique():
 df_compare=pd.concat(frames)
 
 
+local_root = '/Users/paulchamberlain/Data/SOSE/'
+ssh = np.load(os.path.join(local_root,'sshave.npy'))
+mat = scipy.io.loadmat(os.path.join(local_root,'grid.mat'))
+plot_data = np.ma.masked_equal(ssh,0.)
+XC = mat['XC'][:,0]
+YC = mat['YC'][0,:]
+
+
 for row in df_plot.iterrows():
      date1 = row[1]['Date']
      date2 = row[1]['Date Compare']
@@ -76,12 +84,44 @@ for row in df_plot.iterrows():
           compare_series = (df1[df1.Pressure>400][variable]-df2[df2.Pressure>400][variable])
           compare_series = compare_series.abs() #absolute value of the difference below 400 m (this should be relatively stable, so differences will indicate differences in sensors.)
           if (compare_series>difference_threshold).any():
-               plt.figure()
+               print '###### I found a questionable one #########'
+               plt.figure(figsize=(13,5))
+               plt.subplot(1,2,1)
                df_holder = df[(df.Date==date1)&(df.Cruise==cruise1)]
-               plt.plot(df_holder.dropna(subset=[variable])[variable].values,df_holder.dropna(subset=[variable]).Pressure.values,label=cruise1)
+               plt.plot(df_holder.dropna(subset=[variable])[variable].values,df_holder.dropna(subset=[variable]).Pressure.values,label=cruise1+' on '+date1.strftime(format='%Y-%m-%d'))
                df_holder = df[(df.Date==date2)&(df.Cruise==cruise2)]
-               plt.plot(df_holder.dropna(subset=[variable])[variable].values,df_holder.dropna(subset=[variable]).Pressure.values,label=cruise2)
+               plt.plot(df_holder.dropna(subset=[variable])[variable].values,df_holder.dropna(subset=[variable]).Pressure.values,label=cruise2+' on '+date2.strftime(format='%Y-%m-%d'))
                plt.gca().invert_yaxis()
                plt.title(variable)
                plt.legend()
-               plt.show()
+               plt.subplot(1,2,2)
+               m = Basemap(projection='spstere',boundinglat=-50,lon_0=180,resolution='l')
+               m.drawcoastlines(linewidth=1.5)
+               m.fillcontinents(zorder=8)
+               line_space = 20
+               fontsz=10
+               parallels = np.arange(-90,0,line_space/2)
+               m.drawparallels(parallels,labels=[1,0,0,0],fontsize=fontsz)
+               meridians = np.arange(-360.,360.,line_space)
+               m.drawmeridians(meridians,labels=[0,0,0,1],fontsize=fontsz)
+               xx,yy = np.meshgrid(XC,YC)
+               XX,YY = m(xx,yy)
+               lev = np.max([abs(np.nanmin(plot_data)),abs(np.nanmax(plot_data))])
+               levels = np.linspace(-lev,lev,20)
+               cs = m.contour(XX,YY,plot_data,levels,linewidths=0.5,colors='k',animated=True,alpha=0.4)
+               ca = m.contourf(XX,YY,plot_data,levels,cmap=plt.cm.RdBu_r,animated=True,alpha=0.4)
+               y = [row[1]['Lat'],row[1]['Lon Compare']]
+               x = [row[1]['Lon'],row[1]['Lat Compare']]
+
+               X,Y = m(x,y)
+               m.scatter(X,Y,marker='*',c='gold',s=260,linewidths=2,edgecolors='k')
+
+
+               # plt.colorbar(ca)
+               # plt.clabel(cs,inline=1,fontsize=6)
+
+
+
+
+               plt.savefig('./float_intercompare_plots/'+str(row[0])+variable)
+               plt.close()
