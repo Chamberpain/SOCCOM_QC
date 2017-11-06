@@ -35,15 +35,17 @@ def subsample_df(holder_):
 
 	return df[(df['Lat Cut'].isin(lat_list))&(df['Lon Cut'].isin(lon_list))]
 
-
-df = pd.read_pickle(soccom_proj_settings.soccom_drifter_file) #read in all the SOCCOM profiles
+df_goship = pd.read_pickle(soccom_proj_settings.goship_file)
+df_soccom = pd.read_pickle(soccom_proj_settings.soccom_drifter_file)
+float_list = df_soccom.Cruise.unique()
+df = pd.concat([df_soccom,df_goship]) #read in all the SOCCOM profiles
 df = df.drop_duplicates(subset=['Lat','Lon','Cruise','Date'])[['Lat','Lon','Cruise','Date']] #drop everything else but one position value so that the code runs faster
 df = df.dropna(subset=['Lat','Lon'])
 df.Lon = oceans.wrap_lon180(df.Lon)
 
 # bin the data, so that we can more efficiently check the distances
-df['Lon Cut'] = pd.cut(df.Lon,range(-180,185,5),include_lowest=True)
-df['Lat Cut'] = pd.cut(df.Lat,range(-90,0,5),include_lowest=True)
+df['Lon Cut'] = pd.cut(df.Lon,range(-180,185,3),include_lowest=True)
+df['Lat Cut'] = pd.cut(df.Lat,range(-90,0,3),include_lowest=True)
 lon_bins = (df['Lon Cut'].values).categories
 lat_bins = (df['Lat Cut'].values).categories
 
@@ -52,6 +54,8 @@ frames = []
 df = df.apply(assign_pos,axis=1)
 for cruise in df.Cruise.unique():
 	print cruise
+	if cruise not in float_list:
+		continue # we are not interested in computing the distance from WOCE stations to one another.
 	holder = df[df.Cruise==cruise] #select only the looped cruise from the dataframe
 	df = df[df.Cruise!=cruise] # remove the looped cruise (not interested in comparing the selected float profiles to each other)
 	for date in holder.Date.unique():
