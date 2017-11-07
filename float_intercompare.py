@@ -35,10 +35,10 @@ def subsample_df(holder_):
 
 	return df[(df['Lat Cut'].isin(lat_list))&(df['Lon Cut'].isin(lon_list))]
 
-df_goship = pd.read_pickle(soccom_proj_settings.goship_file)
+# df_goship = pd.read_pickle(soccom_proj_settings.goship_file)
 df_soccom = pd.read_pickle(soccom_proj_settings.soccom_drifter_file)
 float_list = df_soccom.Cruise.unique()
-df = pd.concat([df_soccom,df_goship]) #read in all the SOCCOM profiles
+df = df_soccom  #read in all the SOCCOM profiles
 df = df.drop_duplicates(subset=['Lat','Lon','Cruise','Date'])[['Lat','Lon','Cruise','Date']] #drop everything else but one position value so that the code runs faster
 df = df.dropna(subset=['Lat','Lon'])
 df.Lon = oceans.wrap_lon180(df.Lon)

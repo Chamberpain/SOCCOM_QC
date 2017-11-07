@@ -6,11 +6,12 @@ import soccom_proj_settings
 import numpy as np 
 from scipy import interpolate
 from mpl_toolkits.basemap import Basemap
+import scipy.io
 #Need to program a more reasonable number of pressure values to interpolate
 
 plot_float_stats = True
 pressure_list = np.array(range(20,2000,40))
-variable_list = [('Temperature',0.3),('Salinity',0.1),('Nitrate',20),('Oxygen',20),('pH25C',0.03)] # the second value in each of these tuples is chosen as half a std of the field at 500m
+variable_list = [('Temperature',0.3),('Salinity',0.1),('Nitrate',15),('Oxygen',20),('pH25C',0.03)] # the second value in each of these tuples is chosen as half a std of the field at 500m
 
 def interpolator(dataframe):
      interpolation_list = pressure_list[(pressure_list>dataframe['Pressure'].min())&(pressure_list<dataframe['Pressure'].max())] 
@@ -35,20 +36,25 @@ def interpolator(dataframe):
      df_holder['Lon']=lon
      return df_holder
 
-df = pd.read_pickle(soccom_proj_settings.soccom_drifter_file) #this is the full SOCCOM data file with all profiles
+# df = pd.concat([pd.read_pickle(soccom_proj_settings.soccom_drifter_file),pd.read_pickle(soccom_proj_settings.goship_file)]) #this is the full SOCCOM data file with all profiles
+df = pd.read_pickle(soccom_proj_settings.soccom_drifter_file)
 df_save = pd.read_pickle('./intercompare_floats.pickle') #this is the list of all float profiles that occur in proximity to one another
+df = df[df.Pressure<2000]
 
 if plot_float_stats:
-     df_save['distance'].hist(bins=20) #histogram of all the distances
+     df_save['distance'].hist(bins=20,label='All Occurances') #histogram of all the distances
+     df_save[(df_save['Date']-df_save['Date Compare']).dt.days.abs().mod(365)<45]['distance'].hist(bins=20,label='Within Seasonal Criteria')
      plt.xlabel('Distance (km)')
-     plt.xlim([0,600]) # because we are binning the profiles in 5 degree boxes the area of each bin decreases after a certain threshhold. We limit the plot to 600km because otherwise the plot gives a non-intuitive result
+     plt.xlim([0,250]) # because we are binning the profiles in 5 degree boxes the area of each bin decreases after a certain threshhold. We limit the plot to 600km because otherwise the plot gives a non-intuitive result
      plt.title('Number of occurrances of float intersection by distance')
+     plt.legend()
      plt.figure()
      df_plot = df_save[df_save.distance<50] #restrict to profiles that are within 50km of one another
      (df_plot['Date']-df_plot['Date Compare']).dt.days.abs().hist(bins=20)
      plt.xlabel('Days')
      plt.title('Difference in days for all floats less than 50km')
 
+df_plot = df_save[df_save.distance<50] #restrict to profiles that are within 50km of one another
 df_plot = df_plot[(df_plot['Date']-df_plot['Date Compare']).dt.days.abs().mod(365)<45] #this makes the maximum seasonal time difference 45 days
 float_list = df_plot.Cruise.tolist()+df_plot['Cruise Compare'].tolist()
 date_list = df_plot.Date.tolist()+df_plot['Date Compare'].tolist()
@@ -70,15 +76,25 @@ plot_data = np.ma.masked_equal(ssh,0.)
 XC = mat['XC'][:,0]
 YC = mat['YC'][0,:]
 
-
+frames = []
 for row in df_plot.iterrows():
      date1 = row[1]['Date']
      date2 = row[1]['Date Compare']
      cruise1 = row[1]['Cruise']
      cruise2 = row[1]['Cruise Compare']
      
+     df1.Pressure.isin(df2.Pressure)
+
      df1 = df_compare[(df_compare.Date==date1)&(df_compare.Cruise==cruise1)] 
      df2 = df_compare[(df_compare.Date==date2)&(df_compare.Cruise==cruise2)] #grab the interpoalted profiles for the specified dates and cruises
+
+     df1 = df1[df1.Pressure.isin(df2.Pressure)]
+     df2 = df2[df2.Pressure.isin(df1.Pressure)]
+
+     df_dummy = df1[list(zip(*variable_list)[0])]-df2[list(zip(*variable_list)[0])]
+     df_dummy['Pressure']=df1.Pressure
+     frames.append(df_dummy)
+
 
      for variable,difference_threshold in variable_list: 
           compare_series = (df1[df1.Pressure>400][variable]-df2[df2.Pressure>400][variable])
@@ -110,18 +126,28 @@ for row in df_plot.iterrows():
                levels = np.linspace(-lev,lev,20)
                cs = m.contour(XX,YY,plot_data,levels,linewidths=0.5,colors='k',animated=True,alpha=0.4)
                ca = m.contourf(XX,YY,plot_data,levels,cmap=plt.cm.RdBu_r,animated=True,alpha=0.4)
-               y = [row[1]['Lat'],row[1]['Lon Compare']]
-               x = [row[1]['Lon'],row[1]['Lat Compare']]
+               y = [row[1]['Lat'],row[1]['Lat Compare']]
+               x = [row[1]['Lon'],row[1]['Lon Compare']]
 
                X,Y = m(x,y)
                m.scatter(X,Y,marker='*',c='gold',s=260,linewidths=2,edgecolors='k')
-
+               plt.title('SSH and Float Location')
 
                # plt.colorbar(ca)
                # plt.clabel(cs,inline=1,fontsize=6)
 
-
-
-
                plt.savefig('./float_intercompare_plots/'+str(row[0])+variable)
                plt.close()
+
+df = pd.concat(frames)  #this is the dataframe with the total fleet differences
+plt.figure(figsize=(13,5))
+for n,variable in enumerate(list(zip(*variable_list)[0])):          
+     plt.subplot(2,3,(n+1))
+     for pres in df.Pressure.unique():
+          series_plot = df[df.Pressure==pres][variable]
+          plt.errorbar(series_plot.mean(), pres, xerr=series_plot.std(),fmt='o',color='b')
+          plt.title(variable)
+     plt.gca().invert_yaxis()
+     if n in [0,3]:
+          plt.ylabel('Pressure (db)')
+plt.suptitle('Average and Standard Deviation of Profile Discrepancy')
