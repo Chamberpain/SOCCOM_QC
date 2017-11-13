@@ -8,6 +8,7 @@ import oceans
 
 #need to add functionality to read in and compare WOES cruise data and SOCCAT data 
 
+quality_cruise_list = ['P14S','P15S','P16S','P18','P17E','SR03','SR04','I09S','I08S','S04I','S04P','I07S','I06S','SR01','A23','A12','A13.5']
 
 
 def assign_pos(row):
@@ -35,11 +36,17 @@ def subsample_df(holder_):
 
 	return df[(df['Lat Cut'].isin(lat_list))&(df['Lon Cut'].isin(lon_list))]
 
-# df_goship = pd.read_pickle(soccom_proj_settings.goship_file)
+df_goship = pd.read_pickle(soccom_proj_settings.goship_file)
+# cruise_list = df_goship.Cruise.unique()
+# cruise_list = [i for e in quality_cruise_list for i in cruise_list if e in i] 
+# df_goship = df_goship[df_goship.Cruise.isin(cruise_list)]
+df_goship = df_goship[df_goship.Pressure<2000] # some casts were exclusively below 2000m and we want to eliminate these from the list
+df_goship['Type']='GOSHIP'
 df_soccom = pd.read_pickle(soccom_proj_settings.soccom_drifter_file)
+df_soccom['Type']='SOCCOM'
 float_list = df_soccom.Cruise.unique()
-df = df_soccom  #read in all the SOCCOM profiles
-df = df.drop_duplicates(subset=['Lat','Lon','Cruise','Date'])[['Lat','Lon','Cruise','Date']] #drop everything else but one position value so that the code runs faster
+df = pd.concat([df_soccom,df_goship])  #read in all the SOCCOM profiles
+df = df.drop_duplicates(subset=['Lat','Lon','Cruise','Date'])[['Lat','Lon','Cruise','Date','Type']] #drop everything else but one position value so that the code runs faster
 df = df.dropna(subset=['Lat','Lon'])
 df.Lon = oceans.wrap_lon180(df.Lon)
 
@@ -48,7 +55,6 @@ df['Lon Cut'] = pd.cut(df.Lon,range(-180,185,3),include_lowest=True)
 df['Lat Cut'] = pd.cut(df.Lat,range(-90,0,3),include_lowest=True)
 lon_bins = (df['Lon Cut'].values).categories
 lat_bins = (df['Lat Cut'].values).categories
-
 
 frames = []
 df = df.apply(assign_pos,axis=1)
@@ -68,7 +74,7 @@ for cruise in df.Cruise.unique():
 			df_output['Cruise Compare']=holder_token['Cruise'].values[0]
 			df_output['Lat Compare']=holder_token['Lat'].values[0]
 			df_output['Lon Compare']=holder_token['Lon'].values[0]
-			frames.append(df_output[['Date','Cruise','Lat','Lon','Date Compare','Cruise Compare','Lat Compare','Lon Compare','distance']]) 
+			frames.append(df_output[['Date','Cruise','Lat','Lon','Type','Date Compare','Cruise Compare','Lat Compare','Lon Compare','distance']]) 
 			#then append to frames (this is done because it is orders of magnitude faster for pandas)
 df_save = pd.concat(frames) #create large dataframe from the list of dataframes 
 df_save.to_pickle('./intercompare_floats.pickle') # and save. 
